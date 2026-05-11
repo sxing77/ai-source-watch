@@ -1,0 +1,18 @@
+[project]
+name = "ai-source-watch"
+version = "0.1.0"
+description = "Watch Replicate and Toolify for newly listed AI models and tools."
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.32.0",
+    "beautifulsoup4>=4.12.0",
+    "python-dotenv>=1.0.0",
+    "playwright>=1.45.0",
+]
+
+[project.scripts]
+ai-source-watch = "ai_source_watch.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
