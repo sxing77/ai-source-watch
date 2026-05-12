@@ -79,50 +79,32 @@ def fetch_toolify_new(
     url: str = "https://www.toolify.ai/zh/new",
     use_browser: bool = True,
 ) -> SourceResult:
+    """Fetch new tools from Toolify.
+    
+    Note: Toolify has aggressive Cloudflare protection that blocks most automation.
+    Currently returns empty - manual access or commercial proxy service required.
+    """
     warnings: list[str] = []
-    html = ""
-
-    # 1. 首选：Jina AI Reader（绕过 Cloudflare）
-    try:
-        html = _fetch_html_jina(url)
-        if html:
-            warnings.append("Toolify fetched via Jina AI Reader successfully.")
-    except Exception as exc:
-        warnings.append(f"Toolify Jina fetch failed: {exc}")
-
-    # 2. 回退：直接 requests 抓取
-    if not html:
-        try:
-            html = _fetch_html_requests(url)
-        except Exception as exc:
-            warnings.append(f"Toolify direct fetch failed: {exc}")
-
-        if _looks_like_cloudflare(html):
-            warnings.append("Toolify direct fetch hit a Cloudflare challenge.")
-            html = ""
-
-    # 3. 兜底：Playwright 浏览器渲染
-    if not html and use_browser:
-        try:
-            html = _fetch_html_playwright(url)
-        except Exception as exc:
-            warnings.append(f"Toolify browser fetch failed: {exc}")
-        if _looks_like_cloudflare(html):
-            warnings.append("Toolify browser fetch still hit a Cloudflare challenge.")
-            html = ""
-
-    if not html:
-        return SourceResult(warnings=warnings or ["Toolify skipped: no HTML returned."])
-
-    items = _parse_toolify_new(html, base_url=url, limit=limit)
-    if not items:
-        warnings.append("Toolify returned HTML, but no new-tool cards were parsed.")
-    return SourceResult(items=items, warnings=warnings)
+    
+    # Toolify is currently blocked by Cloudflare for all automated methods:
+    # - Jina AI Reader returns extracted markdown (not tool list)
+    # - Direct requests: 403
+    # - Scrapling: 403  
+    # - Playwright: Cloudflare challenge page
+    
+    # Silently skip for now - Replicate monitoring still works
+    return SourceResult(
+        warnings=["Toolify skipped: Cloudflare protection blocks automated access. Consider manual browser access or commercial proxy service."]
+    )
 
 
 def _fetch_html_jina(url: str) -> str:
-    """Use Jina AI Reader to fetch content, bypassing Cloudflare."""
-    jina_url = f"https://r.jina.ai/{url}"
+    """Use Jina AI Reader to fetch content, bypassing Cloudflare.
+    
+    Uses https://r.jina.ai/http://<url> to get raw HTML instead of extracted markdown.
+    """
+    # Use http:// prefix to get raw HTML (not extracted markdown)
+    jina_url = f"https://r.jina.ai/http://{url.replace('https://', '').replace('http://', '')}"
     response = requests.get(
         jina_url,
         headers={

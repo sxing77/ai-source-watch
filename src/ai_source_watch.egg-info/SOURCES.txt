@@ -1,0 +1,15 @@
+README.md
+pyproject.toml
+src/ai_source_watch/__init__.py
+src/ai_source_watch/__main__.py
+src/ai_source_watch/cli.py
+src/ai_source_watch/items.py
+src/ai_source_watch/report.py
+src/ai_source_watch/sources.py
+src/ai_source_watch/storage.py
+src/ai_source_watch.egg-info/PKG-INFO
+src/ai_source_watch.egg-info/SOURCES.txt
+src/ai_source_watch.egg-info/dependency_links.txt
+src/ai_source_watch.egg-info/entry_points.txt
+src/ai_source_watch.egg-info/requires.txt
+src/ai_source_watch.egg-info/top_level.txt
