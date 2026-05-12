@@ -80,22 +80,52 @@ def fetch_toolify_new(
     use_browser: bool = True,
 ) -> SourceResult:
     """Fetch new tools from Toolify.
-    
-    Note: Toolify has aggressive Cloudflare protection that blocks most automation.
-    Currently returns empty - manual access or commercial proxy service required.
+
+    Tries multiple fetch strategies; falls through gracefully on failure.
     """
     warnings: list[str] = []
-    
-    # Toolify is currently blocked by Cloudflare for all automated methods:
-    # - Jina AI Reader returns extracted markdown (not tool list)
-    # - Direct requests: 403
-    # - Scrapling: 403  
-    # - Playwright: Cloudflare challenge page
-    
-    # Silently skip for now - Replicate monitoring still works
-    return SourceResult(
-        warnings=["Toolify skipped: Cloudflare protection blocks automated access. Consider manual browser access or commercial proxy service."]
-    )
+    html = ""
+
+    # 1. Jina AI Reader
+    try:
+        html = _fetch_html_jina(url)
+        if html:
+            warnings.append("Toolify: Jina AI Reader responded.")
+    except Exception as exc:
+        warnings.append(f"Toolify Jina fetch failed: {exc}")
+
+    # 2. Direct requests
+    if not html:
+        try:
+            html = _fetch_html_requests(url)
+        except Exception as exc:
+            warnings.append(f"Toolify direct fetch failed: {exc}")
+
+        if _looks_like_cloudflare(html):
+            warnings.append("Toolify direct fetch hit Cloudflare challenge.")
+            html = ""
+
+    # 3. Playwright browser
+    if not html and use_browser:
+        try:
+            html = _fetch_html_playwright(url)
+        except Exception as exc:
+            warnings.append(f"Toolify browser fetch failed: {exc}")
+        if _looks_like_cloudflare(html):
+            warnings.append("Toolify browser fetch still hit Cloudflare challenge.")
+            html = ""
+
+    if not html:
+        warnings.append(
+            "Toolify skipped: no usable HTML returned. "
+            "(Cloudflare protection may be active.)"
+        )
+        return SourceResult(warnings=warnings)
+
+    items = _parse_toolify_new(html, base_url=url, limit=limit)
+    if not items:
+        warnings.append("Toolify returned HTML, but no new-tool cards were parsed.")
+    return SourceResult(items=items, warnings=warnings)
 
 
 def _fetch_html_jina(url: str) -> str:
