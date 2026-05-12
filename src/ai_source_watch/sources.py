@@ -82,15 +82,26 @@ def fetch_toolify_new(
     warnings: list[str] = []
     html = ""
 
+    # 1. 首选：Jina AI Reader（绕过 Cloudflare）
     try:
-        html = _fetch_html_requests(url)
+        html = _fetch_html_jina(url)
+        if html:
+            warnings.append("Toolify fetched via Jina AI Reader successfully.")
     except Exception as exc:
-        warnings.append(f"Toolify direct fetch failed: {exc}")
+        warnings.append(f"Toolify Jina fetch failed: {exc}")
 
-    if _looks_like_cloudflare(html):
-        warnings.append("Toolify direct fetch hit a Cloudflare challenge.")
-        html = ""
+    # 2. 回退：直接 requests 抓取
+    if not html:
+        try:
+            html = _fetch_html_requests(url)
+        except Exception as exc:
+            warnings.append(f"Toolify direct fetch failed: {exc}")
 
+        if _looks_like_cloudflare(html):
+            warnings.append("Toolify direct fetch hit a Cloudflare challenge.")
+            html = ""
+
+    # 3. 兜底：Playwright 浏览器渲染
     if not html and use_browser:
         try:
             html = _fetch_html_playwright(url)
@@ -107,6 +118,21 @@ def fetch_toolify_new(
     if not items:
         warnings.append("Toolify returned HTML, but no new-tool cards were parsed.")
     return SourceResult(items=items, warnings=warnings)
+
+
+def _fetch_html_jina(url: str) -> str:
+    """Use Jina AI Reader to fetch content, bypassing Cloudflare."""
+    jina_url = f"https://r.jina.ai/{url}"
+    response = requests.get(
+        jina_url,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": "text/plain,text/html,*/*",
+        },
+        timeout=60,
+    )
+    response.raise_for_status()
+    return response.text
 
 
 def _fetch_html_requests(url: str) -> str:
