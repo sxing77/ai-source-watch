@@ -1,5 +1,5 @@
 #!/bin/bash
-# AI Source Watch - 运行并创建飞书通知标记
+# AI Source Watch - 运行并直接发送飞书通知
 
 set -e
 
@@ -22,29 +22,53 @@ fi
 
 echo "✅ [$(date '+%Y-%m-%d %H:%M:%S')] 运行完成，新增: $NEW_COUNT"
 
-# 如果有新增，创建飞书通知标记文件
+# 构建飞书消息
 if [ "$NEW_COUNT" -gt 0 ]; then
-    # 读取新模型详情
-    MODELS=$(grep -A2 "^## Replicate" reports/latest.md | head -20 || echo "")
-    
-    cat > /tmp/ai-watch-notify.json << EOF
+    MESSAGE="🤖 AI新品监控完成\n📅 $(date '+%Y-%m-%d %H:%M')\n📦 新增 $NEW_COUNT 个模型\n🔗 查看面板：http://107.161.89.207:8081/ai-watch/"
+else
+    MESSAGE="🤖 AI新品监控完成\n📅 $(date '+%Y-%m-%d %H:%M')\n📭 今日无新增\n🔗 查看面板：http://107.161.89.207:8081/ai-watch/"
+fi
+
+# 创建通知标记文件（供OpenClaw读取）
+cat > /tmp/ai-watch-notify.json << EOF
 {
-    "type": "ai-watch-new-items",
+    "type": "ai-watch-daily",
     "timestamp": "$(date -Iseconds)",
     "new_count": $NEW_COUNT,
-    "message": "🤖 AI新品监控完成\\n📅 $(date '+%Y-%m-%d %H:%M')\\n📦 新增 $NEW_COUNT 个模型"
+    "message": "$MESSAGE",
+    "notified": false
 }
 EOF
-    echo "📢 已创建通知标记: $NEW_COUNT 个新增"
+
+echo "📢 已创建通知标记: /tmp/ai-watch-notify.json"
+
+# 尝试通过飞书Bot API直接发送（需要配置）
+# 飞书应用凭证（从OpenClaw配置读取）
+FEISHU_APP_ID="cli_a90eefdfae3a9cd4"
+FEISHU_APP_SECRET="$(cat /root/.openclaw/openclaw.json 2>/dev/null | grep -o '"appSecret"[^}]*' | cut -d'"' -f4 || echo "")"
+USER_ID="ou_84f47f889870e687ec85ad6294317187"
+
+if [ -n "$FEISHU_APP_SECRET" ] && [ "$FEISHU_APP_SECRET" != "" ]; then
+    # 获取tenant_access_token
+    TOKEN_RESP=$(curl -s -X POST "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal" \
+        -H "Content-Type: application/json" \
+        -d "{\"app_id\": \"$FEISHU_APP_ID\", \"app_secret\": \"$FEISHU_APP_SECRET\"}" 2>/dev/null)
+    
+    TOKEN=$(echo "$TOKEN_RESP" | grep -o '"tenant_access_token":"[^"]*"' | cut -d'"' -f4)
+    
+    if [ -n "$TOKEN" ]; then
+        # 发送消息
+        curl -s -X POST "https://open.feishu.cn/open-apis/im/v1/messages" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"receive_id\": \"$USER_ID\",
+                \"msg_type\": \"text\",
+                \"content\": \"{\\\"text\\\": \\\"$MESSAGE\\\"}\"
+            }" > /dev/null 2>&1 && echo "✅ 飞书消息已发送" || echo "❌ 飞书消息发送失败"
+    else
+        echo "⚠️ 无法获取飞书token"
+    fi
 else
-    # 无新增时也创建标记（用于确认运行完成）
-    cat > /tmp/ai-watch-notify.json << EOF
-{
-    "type": "ai-watch-no-new",
-    "timestamp": "$(date -Iseconds)",
-    "new_count": 0,
-    "message": "🤖 AI新品监控完成\\n📅 $(date '+%Y-%m-%d %H:%M')\\n📭 今日无新增"
-}
-EOF
-    echo "📭 今日无新增"
+    echo "⚠️ 未配置飞书app_secret，跳过直接发送"
 fi
